@@ -1,18 +1,19 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { PositionDetail } from "@/components/dca/position-detail";
 import {
   fetchPositionDetail,
   fetchExecutionHistory,
-  stopDCAPosition,
   withdrawDCAPosition,
-  topUpDCAPosition,
 } from "@/app/actions/dca";
 import type { DCAPositionSummary, DCAExecutionRecord } from "@/types";
+
+const POLL_INTERVAL_MS = 10_000;
+const POLL_MAX_MS = 120_000;
 
 export default function PositionDetailPage() {
   const { positionId } = useParams<{ positionId: string }>();
@@ -20,6 +21,50 @@ export default function PositionDetailPage() {
   const [executions, setExecutions] = useState<DCAExecutionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollStartRef = useRef<number>(0);
+  const execCountRef = useRef<number>(0);
+  const latestExecCountRef = useRef<number>(0);
+
+  // Keep ref in sync so startPolling always snapshots the latest count
+  latestExecCountRef.current = executions.length;
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  // Poll for new executions after countdown expires
+  const startPolling = useCallback(() => {
+    stopPolling();
+    const id = parseInt(positionId);
+    execCountRef.current = latestExecCountRef.current;
+    pollStartRef.current = Date.now();
+
+    pollRef.current = setInterval(async () => {
+      if (Date.now() - pollStartRef.current > POLL_MAX_MS) {
+        stopPolling();
+        return;
+      }
+      const [posRes, execRes] = await Promise.all([
+        fetchPositionDetail(id),
+        fetchExecutionHistory(id),
+      ]);
+      if (posRes.position) setPosition(posRes.position);
+      if (execRes.executions) {
+        setExecutions(execRes.executions);
+        if (execRes.executions.length > execCountRef.current) {
+          stopPolling();
+        }
+      }
+    }, POLL_INTERVAL_MS);
+  }, [positionId, stopPolling]);
+
+  useEffect(() => {
+    return () => stopPolling();
+  }, [stopPolling]);
 
   useEffect(() => {
     const id = parseInt(positionId);
@@ -55,30 +100,19 @@ export default function PositionDetailPage() {
       <PositionDetail
         position={position}
         executions={executions}
-        onRefresh={async () => {
-          const id = parseInt(positionId);
-          const [posRes, execRes] = await Promise.all([
-            fetchPositionDetail(id),
-            fetchExecutionHistory(id),
-          ]);
-          if (posRes.position) setPosition(posRes.position);
-          if (execRes.executions) setExecutions(execRes.executions);
+        onRefresh={() => {
+          startPolling();
         }}
         onStop={async () => {
           setActionLoading(true);
-          await stopDCAPosition(parseInt(positionId));
-          setPosition((p) => p ? { ...p, status: "stopped" } : null);
+          await withdrawDCAPosition(parseInt(positionId));
+          setPosition((p) => p ? { ...p, status: "withdrawn" } : null);
           setActionLoading(false);
         }}
         onWithdraw={async () => {
           setActionLoading(true);
           await withdrawDCAPosition(parseInt(positionId));
           setPosition((p) => p ? { ...p, status: "withdrawn" } : null);
-          setActionLoading(false);
-        }}
-        onTopUp={async (fd) => {
-          setActionLoading(true);
-          await topUpDCAPosition(parseInt(positionId), fd);
           setActionLoading(false);
         }}
         actionLoading={actionLoading}

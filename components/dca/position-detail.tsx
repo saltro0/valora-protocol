@@ -1,11 +1,9 @@
 "use client";
 
-import { ArrowRight, Square, Wallet, Plus } from "lucide-react";
+import { ArrowRight, Square, Wallet, Loader2 } from "lucide-react";
 import Image from "next/image";
-import { useState } from "react";
 import { ExecutionCountdown } from "./execution-countdown";
 import { ExecutionHistory } from "./execution-history";
-import { TopUpDialog } from "./top-up-dialog";
 import { TOKEN_MAP } from "@/lib/constants/tokens";
 import type { DCAPositionSummary, DCAExecutionRecord } from "@/types";
 
@@ -18,7 +16,6 @@ interface PositionDetailProps {
   executions: DCAExecutionRecord[];
   onStop: () => void;
   onWithdraw: () => void;
-  onTopUp: (formData: FormData) => Promise<void>;
   onRefresh?: () => void;
   actionLoading: boolean;
 }
@@ -28,11 +25,9 @@ export function PositionDetail({
   executions,
   onStop,
   onWithdraw,
-  onTopUp,
   onRefresh,
   actionLoading,
 }: PositionDetailProps) {
-  const [showTopUp, setShowTopUp] = useState(false);
   const totalExec = position.executionsDone + position.executionsLeft;
   const progress = totalExec > 0 ? (position.executionsDone / totalExec) * 100 : 0;
 
@@ -92,29 +87,31 @@ export function PositionDetail({
       )}
 
       {position.status === "active" && (
-        <div className="flex gap-2">
-          <button
-            onClick={onStop}
-            disabled={actionLoading}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium card-surface border border-border-subtle text-text-muted hover:text-amber-400 transition-colors"
-          >
-            <Square className="w-4 h-4" /> Stop
-          </button>
-          <button
-            onClick={() => setShowTopUp(true)}
-            disabled={actionLoading}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium card-surface border border-border-subtle text-text-muted hover:text-emerald-400 transition-colors"
-          >
-            <Plus className="w-4 h-4" /> Top Up
-          </button>
-          <button
-            onClick={onWithdraw}
-            disabled={actionLoading}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium card-surface border border-border-subtle text-text-muted hover:text-accent-cyan transition-colors"
-          >
-            <Wallet className="w-4 h-4" /> Withdraw
-          </button>
-        </div>
+        <button
+          onClick={onStop}
+          disabled={actionLoading}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium card-surface border border-border-subtle text-text-muted hover:text-amber-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {actionLoading ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> Stopping...</>
+          ) : (
+            <><Square className="w-4 h-4" /> Stop & Withdraw</>
+          )}
+        </button>
+      )}
+
+      {position.status === "stopped" && (
+        <button
+          onClick={onWithdraw}
+          disabled={actionLoading}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium card-surface border border-border-subtle text-text-muted hover:text-accent-cyan transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {actionLoading ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> Withdrawing...</>
+          ) : (
+            <><Wallet className="w-4 h-4" /> Withdraw Funds</>
+          )}
+        </button>
       )}
 
       <div className="card-surface p-5 rounded-xl">
@@ -122,16 +119,6 @@ export function PositionDetail({
         <ExecutionHistory executions={executions} />
       </div>
 
-      {showTopUp && (
-        <TopUpDialog
-          onClose={() => setShowTopUp(false)}
-          onSubmit={async (fd) => {
-            await onTopUp(fd);
-            setShowTopUp(false);
-          }}
-          tokenInSymbol={position.tokenInSymbol}
-        />
-      )}
     </div>
   );
 }

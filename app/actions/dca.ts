@@ -106,6 +106,30 @@ export async function withdrawSchedulerBalance() {
   }
 }
 
+export async function unwrapWhbar() {
+  try {
+    const user = await requireUser();
+    const supabase = getAdminSupabase();
+
+    const { data: account } = await supabase
+      .from(DB.ACCOUNTS)
+      .select("account_id, vault_key_id")
+      .eq("user_id", user.id)
+      .single();
+
+    if (!account) return { success: false, error: "No account found" };
+
+    const txHash = await dcaService.unwrapWhbar(
+      account.account_id,
+      account.vault_key_id
+    );
+
+    return { success: true, txHash };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
 export async function createDCAPosition(formData: FormData) {
   try {
     const user = await requireUser();
@@ -217,6 +241,19 @@ export async function withdrawDCAPosition(positionId: number) {
 
     if (!account) return { success: false, error: "No account found" };
 
+    // Snapshot on-chain data before withdraw (withdraw deletes it)
+    let executionsDone = 0;
+    let tokenOutAccum = "0";
+    try {
+      const onChain = await dcaService.getPosition(positionId);
+      if (onChain) {
+        executionsDone = Number(onChain.executionsDone);
+        tokenOutAccum = onChain.tokenOutAccum.toString();
+      }
+    } catch {
+      // Fallback: keep defaults
+    }
+
     const txHash = await dcaService.withdrawPosition(
       account.account_id,
       account.vault_key_id,
@@ -225,7 +262,12 @@ export async function withdrawDCAPosition(positionId: number) {
 
     await supabase
       .from(DB.DCA_POSITIONS)
-      .update({ status: "withdrawn", updated_at: new Date().toISOString() })
+      .update({
+        status: "withdrawn",
+        executions_done: executionsDone,
+        token_out_accum: tokenOutAccum,
+        updated_at: new Date().toISOString(),
+      })
       .eq("position_id", positionId)
       .eq("user_id", user.id);
 
@@ -291,35 +333,39 @@ export async function fetchUserPositions(): Promise<{
         const tokenInDecimals = resolveDecimals(row.token_in);
         const tokenOutDecimals = resolveDecimals(row.token_out);
 
-        let executionsLeft = row.max_executions ?? 0;
-        let executionsDone = 0;
+        let executionsDone = row.executions_done ?? 0;
+        let executionsLeft = (row.max_executions ?? 0) - executionsDone;
         let tokenInBalance = "0";
-        let tokenOutAccum = "0";
+        let tokenOutAccum = row.token_out_accum
+          ? formatRawAmount(row.token_out_accum, tokenOutDecimals)
+          : "0";
         let lastExecutedAt = 0;
         let status = row.status as DCAPositionSummary["status"];
 
-        // Read on-chain state for all positions (not just active)
-        try {
-          const onChain = await dcaService.getPosition(row.position_id);
-          if (onChain) {
-            executionsLeft = Number(onChain.executionsLeft);
-            executionsDone = Number(onChain.executionsDone);
-            tokenInBalance = formatRawAmount(onChain.tokenInBalance, tokenInDecimals);
-            tokenOutAccum = formatRawAmount(onChain.tokenOutAccum, tokenOutDecimals);
-            lastExecutedAt = Number(onChain.lastExecutedAt);
+        // Read on-chain state (skip for withdrawn — data is deleted on-chain)
+        if (status !== "withdrawn") {
+          try {
+            const onChain = await dcaService.getPosition(row.position_id);
+            if (onChain) {
+              executionsLeft = Number(onChain.executionsLeft);
+              executionsDone = Number(onChain.executionsDone);
+              tokenInBalance = formatRawAmount(onChain.tokenInBalance, tokenInDecimals);
+              tokenOutAccum = formatRawAmount(onChain.tokenOutAccum, tokenOutDecimals);
+              lastExecutedAt = Number(onChain.lastExecutedAt);
 
-            // Sync DB if position deactivated on-chain
-            if (!onChain.active && status === "active") {
-              status = executionsLeft === 0 ? "exhausted" : "stopped";
-              await supabase
-                .from(DB.DCA_POSITIONS)
-                .update({ status, updated_at: new Date().toISOString() })
-                .eq("position_id", row.position_id)
-                .eq("user_id", user.id);
+              // Sync DB if position deactivated on-chain
+              if (!onChain.active && status === "active") {
+                status = executionsLeft === 0 ? "exhausted" : "stopped";
+                await supabase
+                  .from(DB.DCA_POSITIONS)
+                  .update({ status, updated_at: new Date().toISOString() })
+                  .eq("position_id", row.position_id)
+                  .eq("user_id", user.id);
+              }
             }
+          } catch {
+            // Fallback to DB data if on-chain read fails
           }
-        } catch {
-          // Fallback to DB data if on-chain read fails
         }
 
         return {
@@ -368,34 +414,38 @@ export async function fetchPositionDetail(
     const tokenInDecimals = resolveDecimals(row.token_in);
     const tokenOutDecimals = resolveDecimals(row.token_out);
 
-    let executionsLeft = row.max_executions ?? 0;
-    let executionsDone = 0;
+    let executionsDone = row.executions_done ?? 0;
+    let executionsLeft = (row.max_executions ?? 0) - executionsDone;
     let tokenInBalance = "0";
-    let tokenOutAccum = "0";
+    let tokenOutAccum = row.token_out_accum
+      ? formatRawAmount(row.token_out_accum, tokenOutDecimals)
+      : "0";
     let lastExecutedAt = 0;
     let status = row.status as DCAPositionSummary["status"];
 
-    // Always read on-chain state for detail view
-    try {
-      const onChain = await dcaService.getPosition(positionId);
-      if (onChain) {
-        executionsLeft = Number(onChain.executionsLeft);
-        executionsDone = Number(onChain.executionsDone);
-        tokenInBalance = formatRawAmount(onChain.tokenInBalance, tokenInDecimals);
-        tokenOutAccum = formatRawAmount(onChain.tokenOutAccum, tokenOutDecimals);
-        lastExecutedAt = Number(onChain.lastExecutedAt);
+    // Read on-chain state (skip for withdrawn — data is deleted on-chain)
+    if (status !== "withdrawn") {
+      try {
+        const onChain = await dcaService.getPosition(positionId);
+        if (onChain) {
+          executionsLeft = Number(onChain.executionsLeft);
+          executionsDone = Number(onChain.executionsDone);
+          tokenInBalance = formatRawAmount(onChain.tokenInBalance, tokenInDecimals);
+          tokenOutAccum = formatRawAmount(onChain.tokenOutAccum, tokenOutDecimals);
+          lastExecutedAt = Number(onChain.lastExecutedAt);
 
-        if (!onChain.active && status === "active") {
-          status = executionsLeft === 0 ? "exhausted" : "stopped";
-          await supabase
-            .from(DB.DCA_POSITIONS)
-            .update({ status, updated_at: new Date().toISOString() })
-            .eq("position_id", positionId)
-            .eq("user_id", user.id);
+          if (!onChain.active && status === "active") {
+            status = executionsLeft === 0 ? "exhausted" : "stopped";
+            await supabase
+              .from(DB.DCA_POSITIONS)
+              .update({ status, updated_at: new Date().toISOString() })
+              .eq("position_id", positionId)
+              .eq("user_id", user.id);
+          }
         }
+      } catch {
+        // Fallback to DB data
       }
-    } catch {
-      // Fallback to DB data
     }
 
     return {

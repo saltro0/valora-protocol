@@ -249,6 +249,7 @@ export type Database = {
         Row: {
           amount_per_swap: number
           created_at: string | null
+          executions_done: number
           id: number
           interval_seconds: number
           max_executions: number
@@ -256,6 +257,7 @@ export type Database = {
           status: string | null
           token_in: string
           token_out: string
+          token_out_accum: string
           tx_hash: string | null
           updated_at: string | null
           user_id: string
@@ -263,6 +265,7 @@ export type Database = {
         Insert: {
           amount_per_swap: number
           created_at?: string | null
+          executions_done?: number
           id?: number
           interval_seconds: number
           max_executions: number
@@ -270,6 +273,7 @@ export type Database = {
           status?: string | null
           token_in: string
           token_out: string
+          token_out_accum?: string
           tx_hash?: string | null
           updated_at?: string | null
           user_id: string
@@ -277,6 +281,7 @@ export type Database = {
         Update: {
           amount_per_swap?: number
           created_at?: string | null
+          executions_done?: number
           id?: number
           interval_seconds?: number
           max_executions?: number
@@ -284,6 +289,7 @@ export type Database = {
           status?: string | null
           token_in?: string
           token_out?: string
+          token_out_accum?: string
           tx_hash?: string | null
           updated_at?: string | null
           user_id?: string

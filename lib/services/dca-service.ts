@@ -133,6 +133,52 @@ export class DCAService {
     await this.signAndSubmit(tx, userAccountId, userVaultKeyId, client);
   }
 
+  async unwrapWhbar(
+    userAccountId: string,
+    userVaultKeyId: string
+  ): Promise<string> {
+    const client = this.buildClient();
+    try {
+      // Get current WHBAR balance from Mirror Node
+      const associated = await this.getAssociatedTokens(userAccountId);
+      const whbarTokenId = TokenId.fromSolidityAddress(WHBAR_ADDRESS);
+
+      const base = HEDERA_NETWORK === "mainnet"
+        ? "https://mainnet.mirrornode.hedera.com"
+        : "https://testnet.mirrornode.hedera.com";
+      const res = await fetch(`${base}/api/v1/accounts/${userAccountId}/tokens?token.id=${whbarTokenId.toString()}`);
+      const data = res.ok ? await res.json() : { tokens: [] };
+      const whbarBalance = BigInt(data.tokens?.[0]?.balance ?? "0");
+
+      if (whbarBalance <= 0n) {
+        throw new Error("No WHBAR balance to unwrap");
+      }
+
+      // Approve WHBAR wrapper contract to pull WHBAR tokens from user
+      const approveTx = new AccountAllowanceApproveTransaction()
+        .approveTokenAllowance(
+          TokenId.fromSolidityAddress(WHBAR_ADDRESS),
+          AccountId.fromString(userAccountId),
+          AccountId.fromString(ContractId.fromSolidityAddress(WHBAR_WRAPPER_ADDRESS).toString()),
+          Number(whbarBalance)
+        );
+      await this.signAndSubmit(approveTx, userAccountId, userVaultKeyId, client);
+
+      const tx = new ContractExecuteTransaction()
+        .setContractId(ContractId.fromSolidityAddress(WHBAR_WRAPPER_ADDRESS))
+        .setGas(300_000)
+        .setFunction(
+          "withdraw",
+          new ContractFunctionParameters().addUint256(Number(whbarBalance))
+        );
+
+      const { txHash } = await this.signAndSubmit(tx, userAccountId, userVaultKeyId, client);
+      return txHash;
+    } finally {
+      client.close();
+    }
+  }
+
   async depositGas(
     userAccountId: string,
     userVaultKeyId: string,
@@ -285,6 +331,13 @@ export class DCAService {
   ): Promise<string> {
     const client = this.buildClient();
     try {
+      // Read position before withdraw to check if auto-unwrap is needed
+      const pos = await this.getPosition(positionId);
+      const tokenInBalance = pos ? pos.tokenInBalance : 0n;
+      const isWhbar = pos
+        ? pos.tokenIn.toLowerCase() === WHBAR_ADDRESS.toLowerCase()
+        : false;
+
       const tx = new ContractExecuteTransaction()
         .setContractId(ContractId.fromString(DCA_REGISTRY_ID))
         .setGas(1_500_000)
@@ -294,6 +347,30 @@ export class DCAService {
         );
 
       const { txHash } = await this.signAndSubmit(tx, userAccountId, userVaultKeyId, client);
+
+      // Auto-unwrap WHBAR → HBAR if the position used WHBAR as tokenIn
+      if (isWhbar && tokenInBalance > 0n) {
+        // Approve WHBAR wrapper to pull WHBAR tokens
+        const approveUnwrapTx = new AccountAllowanceApproveTransaction()
+          .approveTokenAllowance(
+            TokenId.fromSolidityAddress(WHBAR_ADDRESS),
+            AccountId.fromString(userAccountId),
+            AccountId.fromString(ContractId.fromSolidityAddress(WHBAR_WRAPPER_ADDRESS).toString()),
+            Number(tokenInBalance)
+          );
+        await this.signAndSubmit(approveUnwrapTx, userAccountId, userVaultKeyId, client);
+
+        const unwrapTx = new ContractExecuteTransaction()
+          .setContractId(ContractId.fromSolidityAddress(WHBAR_WRAPPER_ADDRESS))
+          .setGas(300_000)
+          .setFunction(
+            "withdraw",
+            new ContractFunctionParameters().addUint256(Number(tokenInBalance))
+          );
+
+        await this.signAndSubmit(unwrapTx, userAccountId, userVaultKeyId, client);
+      }
+
       return txHash;
     } finally {
       client.close();
@@ -364,7 +441,9 @@ export class DCAService {
 
       // Struct with all fixed-size fields: no ABI offset pointer, fields start at slot 0
       const S = 0;
-      const owner = result.getAddress(S);
+      // getAddress() returns without 0x prefix — normalize all addresses
+      const toAddr = (i: number) => `0x${result.getAddress(i)}`;
+      const owner = toAddr(S);
 
       // Zero owner means position does not exist
       if (!owner || owner === "0x0000000000000000000000000000000000000000") {
@@ -373,8 +452,8 @@ export class DCAService {
 
       return {
         owner,
-        tokenIn: result.getAddress(S + 1),
-        tokenOut: result.getAddress(S + 2),
+        tokenIn: toAddr(S + 1),
+        tokenOut: toAddr(S + 2),
         amountPerSwap: toBigInt(result.getUint256(S + 3)),
         interval: toBigInt(result.getUint256(S + 4)),
         maxExecutions: toBigInt(result.getUint256(S + 5)),
@@ -385,7 +464,7 @@ export class DCAService {
         hbarBalance: toBigInt(result.getUint256(S + 10)),
         slippageBps: result.getUint256(S + 11).toNumber(),
         active: result.getBool(S + 12),
-        currentSchedule: result.getAddress(S + 13),
+        currentSchedule: toAddr(S + 13),
         lastExecutedAt: toBigInt(result.getUint256(S + 14)),
         consecutiveFailures: result.getUint256(S + 15).toNumber(),
       };
