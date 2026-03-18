@@ -1,17 +1,37 @@
 'use client'
 
 import { useAccount } from '@/hooks/use-account'
-import { Copy, Check, Loader2, Wallet } from 'lucide-react'
+import { rotateKey } from '@/app/actions/vault'
+import { Copy, Check, Loader2, Wallet, KeyRound, AlertTriangle, X } from 'lucide-react'
 import { useState } from 'react'
 
 export function AccountCard() {
   const { account, provisioning, error, createAccount } = useAccount()
   const [copied, setCopied] = useState<string | null>(null)
+  const [showRotateConfirm, setShowRotateConfirm] = useState(false)
+  const [isRotating, setIsRotating] = useState(false)
+  const [rotationSuccess, setRotationSuccess] = useState<string | null>(null)
+  const [rotationError, setRotationError] = useState<string | null>(null)
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text)
     setCopied(label)
     setTimeout(() => setCopied(null), 2000)
+  }
+
+  const handleRotate = async () => {
+    setShowRotateConfirm(false)
+    setIsRotating(true)
+    setRotationError(null)
+
+    const result = await rotateKey()
+
+    setIsRotating(false)
+    if (result.success && result.newWalletAddress) {
+      setRotationSuccess(result.newWalletAddress)
+    } else {
+      setRotationError(result.error || 'Key rotation failed')
+    }
   }
 
   if (!account) {
@@ -96,6 +116,118 @@ export function AccountCard() {
           </div>
         ))}
       </div>
+
+      {/* Key rotation */}
+      <div className="mt-4 pt-4 border-t border-white/5">
+        <button
+          onClick={() => setShowRotateConfirm(true)}
+          disabled={isRotating}
+          className="flex items-center gap-2 text-[13px] text-zinc-400 hover:text-white bg-white/5 hover:bg-white/10 px-3 py-2 rounded-lg border border-white/5 hover:border-white/20 transition-all duration-200 disabled:opacity-50 cursor-pointer"
+        >
+          {isRotating ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <KeyRound className="w-3.5 h-3.5" />
+          )}
+          {isRotating ? 'Rotating...' : 'Rotate Signing Key'}
+        </button>
+      </div>
+
+      {/* Confirmation modal */}
+      {showRotateConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-[#1a1a1e] border border-white/10 rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-yellow-400" />
+                <h3 className="text-base font-semibold text-white">Rotate Signing Key</h3>
+              </div>
+              <button onClick={() => setShowRotateConfirm(false)} className="text-zinc-500 hover:text-white cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-[13px] text-zinc-400 mb-4">
+              A new cryptographic key will be created in AWS KMS and your Hedera account will be updated.
+            </p>
+            <div className="space-y-2 mb-5 text-[13px]">
+              <div className="flex items-center gap-2 text-emerald-400">
+                <Check className="w-3.5 h-3.5" />
+                <span>Hedera Account ID stays the same</span>
+              </div>
+              <div className="flex items-center gap-2 text-yellow-400">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                <span>EVM Address will change</span>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowRotateConfirm(false)}
+                className="flex-1 px-4 py-2 text-[13px] text-zinc-400 bg-white/5 hover:bg-white/10 rounded-lg border border-white/5 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRotate}
+                className="flex-1 px-4 py-2 text-[13px] text-white bg-red-500/20 hover:bg-red-500/30 rounded-lg border border-red-500/30 transition-colors cursor-pointer"
+              >
+                Confirm Rotation
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success modal */}
+      {rotationSuccess && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-[#1a1a1e] border border-white/10 rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl">
+            <div className="flex items-center gap-2 mb-4">
+              <Check className="w-5 h-5 text-emerald-400" />
+              <h3 className="text-base font-semibold text-white">Key Rotated</h3>
+            </div>
+            <p className="text-[13px] text-zinc-400 mb-3">
+              Your signing key has been rotated successfully. Your new EVM address:
+            </p>
+            <div className="field-row px-3.5 py-3 mb-5">
+              <p className="text-[11px] text-text-muted uppercase tracking-[0.06em] font-medium mb-0.5">New EVM Address</p>
+              <p className="text-[13px] text-emerald-400 font-mono break-all">{rotationSuccess}</p>
+            </div>
+            <button
+              onClick={() => { setRotationSuccess(null); window.location.reload() }}
+              className="w-full px-4 py-2 text-[13px] text-white bg-white/10 hover:bg-white/20 rounded-lg border border-white/5 transition-colors cursor-pointer"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Error modal */}
+      {rotationError && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-[#1a1a1e] border border-white/10 rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl">
+            <div className="flex items-center gap-2 mb-4">
+              <AlertTriangle className="w-5 h-5 text-red-400" />
+              <h3 className="text-base font-semibold text-white">Rotation Failed</h3>
+            </div>
+            <p className="text-[13px] text-zinc-400 mb-2">Something went wrong:</p>
+            <div className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-[13px] text-red-400 mb-3">
+              {rotationError}
+            </div>
+            {rotationError.includes('INSUFFICIENT_PAYER_BALANCE') && (
+              <p className="text-[12px] text-zinc-500 mb-3">
+                Your Hedera account needs HBAR to pay for the key update transaction. Send HBAR to <span className="font-mono text-zinc-300">{account.accountId}</span>.
+              </p>
+            )}
+            <button
+              onClick={() => setRotationError(null)}
+              className="w-full px-4 py-2 text-[13px] text-white bg-white/10 hover:bg-white/20 rounded-lg border border-white/5 transition-colors cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
