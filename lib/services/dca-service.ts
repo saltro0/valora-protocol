@@ -1,5 +1,6 @@
 import {
   AccountAllowanceApproveTransaction,
+  AccountUpdateTransaction,
   TokenAssociateTransaction,
   ContractExecuteTransaction,
   ContractCallQuery,
@@ -67,6 +68,63 @@ export class DCAService {
     const response = await tx.execute(client);
     const receipt = await response.getReceipt(client);
     return { txHash: response.transactionId.toString(), receipt };
+  }
+
+  /**
+   * Rotate the Hedera account key.
+   * Signs the AccountUpdateTransaction with BOTH old and new KMS keys.
+   */
+  async rotateAccountKey(
+    userAccountId: string,
+    oldVaultKeyId: string,
+    oldPublicKeyHex: string,
+    newVaultKeyId: string,
+    newPublicKeyHex: string
+  ): Promise<string> {
+    const client = this.buildClient();
+
+    try {
+      const payer = AccountId.fromString(userAccountId);
+
+      // Compress new public key for Hedera (65-byte → 33-byte)
+      const newRawKey = Buffer.from(newPublicKeyHex, "hex");
+      const newCompressed = compressPublicKey(newRawKey);
+      const newPublicKey = PublicKey.fromBytesECDSA(newCompressed);
+
+      // Build AccountUpdateTransaction with new key
+      const tx = new AccountUpdateTransaction()
+        .setAccountId(payer)
+        .setKey(newPublicKey)
+        .setTransactionId(TransactionId.generate(payer))
+        .freezeWith(client);
+
+      // Extract body bytes for manual signing
+      const bodyBytes = (tx as any)._signedTransactions.list[0].bodyBytes;
+      if (!bodyBytes) throw new Error("Failed to extract transaction body bytes");
+
+      // Sign with OLD key
+      const oldRawKey = Buffer.from(oldPublicKeyHex, "hex");
+      const oldCompressed = compressPublicKey(oldRawKey);
+      const oldPublicKey = PublicKey.fromBytesECDSA(oldCompressed);
+      const oldSig = await vault.signDigest(oldVaultKeyId, bodyBytes);
+      tx.addSignature(oldPublicKey, oldSig.signature);
+
+      // Sign with NEW key (required by Hedera for key changes)
+      const newSig = await vault.signDigest(newVaultKeyId, bodyBytes);
+      tx.addSignature(newPublicKey, newSig.signature);
+
+      // Execute
+      const response = await tx.execute(client);
+      const receipt = await response.getReceipt(client);
+
+      if (receipt.status.toString() !== "SUCCESS") {
+        throw new Error(`Key rotation failed: ${receipt.status.toString()}`);
+      }
+
+      return response.transactionId.toString();
+    } finally {
+      client.close();
+    }
   }
 
   private async getAssociatedTokens(userAccountId: string): Promise<Set<string>> {
