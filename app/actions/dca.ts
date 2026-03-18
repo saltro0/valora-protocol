@@ -5,9 +5,16 @@ import { getAdminSupabase, DB } from "@/lib/supabase/admin";
 import { dcaService } from "@/lib/services/dca-service";
 import { TOKEN_MAP } from "@/lib/constants/tokens";
 import type { CreatePositionParams, DCAPositionSummary, DCAExecutionRecord } from "@/types";
-import type { Json } from "@/types/supabase";
+import { recordAuditLog } from "@/lib/utils/audit";
+import { checkRateLimits, incrementRateLimits } from "@/lib/utils/rate-limiter";
+import { extractClientIp } from "@/lib/utils/guards";
 
 const HEDERA_NETWORK = process.env.NEXT_PUBLIC_HEDERA_NETWORK || "testnet";
+
+async function buildAuditCtx(userId: string, vaultKeyId: string) {
+  const ip = await extractClientIp();
+  return { userId, vaultKeyId, ip };
+}
 
 function resolveSymbol(address: string): string {
   const lower = address.toLowerCase();
@@ -28,6 +35,7 @@ function formatRawAmount(raw: string | number | bigint, decimals: number): strin
 }
 
 export async function depositGasToScheduler(hbarAmount: string) {
+  let ctx: { userId: string; vaultKeyId: string; ip: string | null } | undefined;
   try {
     const user = await requireUser();
     const supabase = getAdminSupabase();
@@ -40,23 +48,23 @@ export async function depositGasToScheduler(hbarAmount: string) {
 
     if (!account) return { success: false, error: "No account found" };
 
+    ctx = await buildAuditCtx(user.id, account.vault_key_id);
+    await checkRateLimits(user.id);
+
     const result = await dcaService.depositGas(
       account.account_id,
       account.vault_key_id,
       hbarAmount
     );
 
-    await supabase.from(DB.AUDIT_LOG).insert({
-      user_id: user.id,
-      vault_key_id: account.vault_key_id,
-      op_type: "gas_deposit",
-      op_params: { hbarAmount } as unknown as Json,
-      tx_hash: result.txHash,
-      result: "success",
-    });
+    await recordAuditLog(ctx, "gas_deposit", { hbarAmount }, { txHash: result.txHash }).catch(() => {});
+    await incrementRateLimits(user.id).catch(() => {});
 
     return { success: true, txHash: result.txHash };
   } catch (err: any) {
+    if (ctx) {
+      await recordAuditLog(ctx, "gas_deposit", { hbarAmount }, { error: err.message }).catch(() => {});
+    }
     return { success: false, error: err.message };
   }
 }
@@ -83,6 +91,7 @@ export async function getSchedulerBalance() {
 }
 
 export async function withdrawSchedulerBalance() {
+  let ctx: { userId: string; vaultKeyId: string; ip: string | null } | undefined;
   try {
     const user = await requireUser();
     const supabase = getAdminSupabase();
@@ -94,19 +103,29 @@ export async function withdrawSchedulerBalance() {
       .single();
 
     if (!account) return { success: false, error: "No account found" };
+
+    ctx = await buildAuditCtx(user.id, account.vault_key_id);
+    await checkRateLimits(user.id);
 
     const result = await dcaService.withdrawSchedulerBalance(
       account.account_id,
       account.vault_key_id
     );
 
+    await recordAuditLog(ctx, "gas_withdraw", {}, { txHash: result.txHash }).catch(() => {});
+    await incrementRateLimits(user.id).catch(() => {});
+
     return { success: true, txHash: result.txHash };
   } catch (err: any) {
+    if (ctx) {
+      await recordAuditLog(ctx, "gas_withdraw", {}, { error: err.message }).catch(() => {});
+    }
     return { success: false, error: err.message };
   }
 }
 
 export async function unwrapWhbar() {
+  let ctx: { userId: string; vaultKeyId: string; ip: string | null } | undefined;
   try {
     const user = await requireUser();
     const supabase = getAdminSupabase();
@@ -118,19 +137,38 @@ export async function unwrapWhbar() {
       .single();
 
     if (!account) return { success: false, error: "No account found" };
+
+    ctx = await buildAuditCtx(user.id, account.vault_key_id);
+    await checkRateLimits(user.id);
 
     const txHash = await dcaService.unwrapWhbar(
       account.account_id,
       account.vault_key_id
     );
 
+    await recordAuditLog(ctx, "unwrap_whbar", {}, { txHash }).catch(() => {});
+    await incrementRateLimits(user.id).catch(() => {});
+
     return { success: true, txHash };
   } catch (err: any) {
+    if (ctx) {
+      await recordAuditLog(ctx, "unwrap_whbar", {}, { error: err.message }).catch(() => {});
+    }
     return { success: false, error: err.message };
   }
 }
 
 export async function createDCAPosition(formData: FormData) {
+  let ctx: { userId: string; vaultKeyId: string; ip: string | null } | undefined;
+  const params: CreatePositionParams = {
+    tokenIn: formData.get("tokenIn") as string,
+    tokenOut: formData.get("tokenOut") as string,
+    amountPerSwap: formData.get("amountPerSwap") as string,
+    tokenInAmount: formData.get("tokenInAmount") as string,
+    interval: parseInt(formData.get("interval") as string),
+    slippageBps: parseInt(formData.get("slippageBps") as string) || 50,
+  };
+
   try {
     const user = await requireUser();
     const supabase = getAdminSupabase();
@@ -143,14 +181,8 @@ export async function createDCAPosition(formData: FormData) {
 
     if (!account) return { success: false, error: "No account found" };
 
-    const params: CreatePositionParams = {
-      tokenIn: formData.get("tokenIn") as string,
-      tokenOut: formData.get("tokenOut") as string,
-      amountPerSwap: formData.get("amountPerSwap") as string,
-      tokenInAmount: formData.get("tokenInAmount") as string,
-      interval: parseInt(formData.get("interval") as string),
-      slippageBps: parseInt(formData.get("slippageBps") as string) || 50,
-    };
+    ctx = await buildAuditCtx(user.id, account.vault_key_id);
+    await checkRateLimits(user.id);
 
     // Deposit gas to scheduler before creating position
     const gasDeposit = formData.get("gasDeposit") as string;
@@ -182,22 +214,20 @@ export async function createDCAPosition(formData: FormData) {
       tx_hash: result.txHash,
     });
 
-    await supabase.from(DB.AUDIT_LOG).insert({
-      user_id: user.id,
-      vault_key_id: account.vault_key_id,
-      op_type: "dca_create",
-      op_params: params as unknown as Json,
-      tx_hash: result.txHash,
-      result: "success",
-    });
+    await recordAuditLog(ctx, "dca_create", params as unknown as Record<string, unknown>, { txHash: result.txHash }).catch(() => {});
+    await incrementRateLimits(user.id).catch(() => {});
 
     return { success: true, positionId: result.positionId };
   } catch (err: any) {
+    if (ctx) {
+      await recordAuditLog(ctx, "dca_create", params as unknown as Record<string, unknown>, { error: err.message }).catch(() => {});
+    }
     return { success: false, error: err.message };
   }
 }
 
 export async function stopDCAPosition(positionId: number) {
+  let ctx: { userId: string; vaultKeyId: string; ip: string | null } | undefined;
   try {
     const user = await requireUser();
     const supabase = getAdminSupabase();
@@ -209,6 +239,9 @@ export async function stopDCAPosition(positionId: number) {
       .single();
 
     if (!account) return { success: false, error: "No account found" };
+
+    ctx = await buildAuditCtx(user.id, account.vault_key_id);
+    await checkRateLimits(user.id);
 
     const txHash = await dcaService.stopPosition(
       account.account_id,
@@ -222,13 +255,20 @@ export async function stopDCAPosition(positionId: number) {
       .eq("position_id", positionId)
       .eq("user_id", user.id);
 
+    await recordAuditLog(ctx, "dca_stop", { positionId }, { txHash }).catch(() => {});
+    await incrementRateLimits(user.id).catch(() => {});
+
     return { success: true, txHash };
   } catch (err: any) {
+    if (ctx) {
+      await recordAuditLog(ctx, "dca_stop", { positionId }, { error: err.message }).catch(() => {});
+    }
     return { success: false, error: err.message };
   }
 }
 
 export async function withdrawDCAPosition(positionId: number) {
+  let ctx: { userId: string; vaultKeyId: string; ip: string | null } | undefined;
   try {
     const user = await requireUser();
     const supabase = getAdminSupabase();
@@ -240,6 +280,9 @@ export async function withdrawDCAPosition(positionId: number) {
       .single();
 
     if (!account) return { success: false, error: "No account found" };
+
+    ctx = await buildAuditCtx(user.id, account.vault_key_id);
+    await checkRateLimits(user.id);
 
     // Snapshot on-chain data before withdraw (withdraw deletes it)
     let executionsDone = 0;
@@ -271,8 +314,14 @@ export async function withdrawDCAPosition(positionId: number) {
       .eq("position_id", positionId)
       .eq("user_id", user.id);
 
+    await recordAuditLog(ctx, "dca_withdraw", { positionId }, { txHash }).catch(() => {});
+    await incrementRateLimits(user.id).catch(() => {});
+
     return { success: true, txHash };
   } catch (err: any) {
+    if (ctx) {
+      await recordAuditLog(ctx, "dca_withdraw", { positionId }, { error: err.message }).catch(() => {});
+    }
     return { success: false, error: err.message };
   }
 }
@@ -281,6 +330,10 @@ export async function topUpDCAPosition(
   positionId: number,
   formData: FormData
 ) {
+  let ctx: { userId: string; vaultKeyId: string; ip: string | null } | undefined;
+  const extraTokenIn = formData.get("extraTokenIn") as string;
+  const extraGas = formData.get("extraGas") as string;
+
   try {
     const user = await requireUser();
     const supabase = getAdminSupabase();
@@ -293,19 +346,25 @@ export async function topUpDCAPosition(
 
     if (!account) return { success: false, error: "No account found" };
 
-    const extraTokenIn = BigInt(formData.get("extraTokenIn") as string);
-    const extraGas = formData.get("extraGas") as string;
+    ctx = await buildAuditCtx(user.id, account.vault_key_id);
+    await checkRateLimits(user.id);
 
     const txHash = await dcaService.topUpPosition(
       account.account_id,
       account.vault_key_id,
       positionId,
-      extraTokenIn,
+      BigInt(extraTokenIn),
       extraGas
     );
 
+    await recordAuditLog(ctx, "dca_topup", { positionId, extraTokenIn, extraGas }, { txHash }).catch(() => {});
+    await incrementRateLimits(user.id).catch(() => {});
+
     return { success: true, txHash };
   } catch (err: any) {
+    if (ctx) {
+      await recordAuditLog(ctx, "dca_topup", { positionId, extraTokenIn, extraGas }, { error: err.message }).catch(() => {});
+    }
     return { success: false, error: err.message };
   }
 }
