@@ -2,7 +2,7 @@
 
 import { signOut } from '@/app/actions/auth'
 import { useSessionStore } from '@/store/session-store'
-import { LogOut, Repeat } from 'lucide-react'
+import { LogOut, Repeat, ScrollText } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
@@ -47,6 +47,16 @@ export function NavBar() {
               >
                 <Repeat className={`w-4 h-4 ${pathname?.startsWith('/dca') ? 'text-[#00f0ff]' : ''}`} />
                 DCA
+              </Link>
+              <Link
+                href="/audit"
+                className={`px-4 py-2 rounded-xl text-[14px] font-medium transition-all duration-200 flex items-center gap-2 ${pathname?.startsWith('/audit')
+                    ? 'text-white bg-white/10 shadow-[inset_0_0_10px_rgba(255,255,255,0.05)]'
+                    : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                  }`}
+              >
+                <ScrollText className={`w-4 h-4 ${pathname?.startsWith('/audit') ? 'text-[#00f0ff]' : ''}`} />
+                Activity
               </Link>
             </nav>
           )}
