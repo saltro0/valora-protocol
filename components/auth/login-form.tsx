@@ -14,7 +14,7 @@ export function LoginForm() {
     <div className="card-surface w-full max-w-[380px] p-7 animate-fade-up">
       <div className="mb-6 text-center">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.png" alt="DCA Swap" width={40} height={40} className="rounded-xl mx-auto mb-4" />
+        <img src="/logo.png" alt="Valora Protocol" width={40} height={40} className="rounded-xl mx-auto mb-4" />
         <h1 className="text-lg font-semibold tracking-[-0.02em] text-text-primary">
           Welcome back
         </h1>

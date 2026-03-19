@@ -1,4 +1,4 @@
-# DCA-Swap: Autonomous Dollar Cost Averaging on Hedera
+# Valora Protocol: Autonomous Dollar Cost Averaging on Hedera
 
 > **Fully autonomous DCA engine** that leverages Hedera's native Schedule Service (HIP-1215) to make a smart contract call itself on a recurring schedule — no bots, no keepers, no cron jobs. Combined with **AWS KMS** for institutional-grade key custody, users get a seamless, set-and-forget DCA experience powered entirely by on-chain infrastructure.
 
@@ -16,7 +16,7 @@ These approaches break the core promise of DeFi: trustless, permissionless autom
 
 ## Our Solution
 
-DCA-Swap solves this with a fundamentally different approach — **the smart contract schedules its own future execution** using Hedera's native Schedule Service (HIP-1215).
+Valora Protocol solves this with a fundamentally different approach — **the smart contract schedules its own future execution** using Hedera's native Schedule Service (HIP-1215).
 
 ```
 User creates position → Contract executes first swap → Contract schedules ITSELF for next execution → Repeat
@@ -299,7 +299,7 @@ A dual-layer audit system tracks every signing operation for compliance and fore
 ## Project Structure
 
 ```
-dca-swap/
+valora-protocol/
 ├── app/                        # Next.js 16 app directory
 │   ├── (auth)/                 # Login, signup
 │   ├── (dashboard)/            # Dashboard, DCA positions, audit log

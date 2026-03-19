@@ -32,9 +32,9 @@ class VaultService {
       new CreateKeyCommand({
         KeySpec: 'ECC_SECG_P256K1',
         KeyUsage: 'SIGN_VERIFY',
-        Description: `DCA Swap signing key — user ${userId}`,
+        Description: `Valora Protocol signing key — user ${userId}`,
         Tags: [
-          { TagKey: 'service', TagValue: 'dca-swap' },
+          { TagKey: 'service', TagValue: 'valora-protocol' },
           { TagKey: 'user_id', TagValue: userId },
         ],
       })

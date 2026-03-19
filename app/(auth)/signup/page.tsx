@@ -7,7 +7,7 @@ export default function SignupPage() {
         <SignupForm />
         <div className="mt-10 flex items-center gap-2 text-[11px] text-text-muted/60 tracking-widest uppercase">
           <div className="w-8 h-px bg-[#27272a]" />
-          DCA Swap
+          Valora Protocol
           <div className="w-8 h-px bg-[#27272a]" />
         </div>
       </div>

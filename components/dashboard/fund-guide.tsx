@@ -24,7 +24,7 @@ export function FundGuide() {
       </div>
 
       <p className="text-[13px] text-text-muted mb-4">
-        Send HBAR to your Hedera account to start using DCA Swap. You need at least 1 HBAR for fees.
+        Send HBAR to your Hedera account to start using Valora Protocol. You need at least 1 HBAR for fees.
       </p>
 
       <div className="field-row px-3.5 py-3 mb-4">

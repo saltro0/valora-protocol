@@ -51,7 +51,7 @@ export function AccountCard() {
         <p className="text-[13px] text-text-muted mb-5 max-w-[280px] mx-auto">
           {provisioning
             ? 'Provisioning a secure key and opening your Hedera account.'
-            : 'Create a custodial Hedera account to start using DCA Swap.'}
+            : 'Create a custodial Hedera account to start using Valora Protocol.'}
         </p>
 
         {error && (
@@ -124,7 +124,7 @@ export function AccountCard() {
       {/* Fund account */}
       <div className="mt-4 pt-4 border-t border-white/5">
         <p className="text-[13px] text-text-muted mb-3">
-          Send HBAR to your Hedera account to start using DCA Swap. You need at least 1 HBAR for fees.
+          Send HBAR to your Hedera account to start using Valora Protocol. You need at least 1 HBAR for fees.
         </p>
         <a
           href={`${HASHSCAN_BASE}/account/${account.accountId}`}

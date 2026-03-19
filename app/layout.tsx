@@ -17,7 +17,7 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'DCA Swap',
+  title: 'Valora Protocol',
   description: 'Automated DCA on Hedera',
 }
 

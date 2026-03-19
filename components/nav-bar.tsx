@@ -18,13 +18,13 @@ export function NavBar() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/logo.png"
-              alt="DCA Swap"
+              alt="Valora Protocol"
               width={36}
               height={36}
               className="rounded-xl transition-transform duration-300 group-hover:scale-105"
             />
             <span className="text-[16px] font-semibold tracking-[-0.02em] text-white">
-              DCA Swap
+              Valora Protocol
             </span>
           </Link>
           {user && (

@@ -1,4 +1,4 @@
-const APP_EMAIL_PREFIX = 'dca-swap__'
+const APP_EMAIL_PREFIX = 'valora-protocol__'
 
 export function addAppPrefix(email: string): string {
   return `${APP_EMAIL_PREFIX}${email}`
