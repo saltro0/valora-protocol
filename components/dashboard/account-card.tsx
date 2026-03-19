@@ -2,8 +2,13 @@
 
 import { useAccount } from '@/hooks/use-account'
 import { rotateKey } from '@/app/actions/vault'
-import { Copy, Check, Loader2, Wallet, KeyRound, AlertTriangle, X } from 'lucide-react'
+import { Copy, Check, Loader2, Wallet, KeyRound, AlertTriangle, X, ExternalLink } from 'lucide-react'
 import { useState } from 'react'
+
+const NETWORK = process.env.NEXT_PUBLIC_HEDERA_NETWORK || 'testnet'
+const HASHSCAN_BASE = NETWORK === 'mainnet'
+  ? 'https://hashscan.io/mainnet'
+  : 'https://hashscan.io/testnet'
 
 export function AccountCard() {
   const { account, provisioning, error, createAccount } = useAccount()
@@ -71,7 +76,6 @@ export function AccountCard() {
 
   const fields = [
     { label: 'Hedera Account', value: account.accountId },
-    { label: 'EVM Address', value: account.walletAddress },
   ]
 
   return (
@@ -117,6 +121,21 @@ export function AccountCard() {
         ))}
       </div>
 
+      {/* Fund account */}
+      <div className="mt-4 pt-4 border-t border-white/5">
+        <p className="text-[13px] text-text-muted mb-3">
+          Send HBAR to your Hedera account to start using DCA Swap. You need at least 1 HBAR for fees.
+        </p>
+        <a
+          href={`${HASHSCAN_BASE}/account/${account.accountId}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-[13px] text-text-muted hover:text-accent-cyan transition-colors"
+        >
+          View on HashScan <ExternalLink className="w-3 h-3" />
+        </a>
+      </div>
+
       {/* Key rotation */}
       <div className="mt-4 pt-4 border-t border-white/5">
         <button
@@ -156,7 +175,7 @@ export function AccountCard() {
               </div>
               <div className="flex items-center gap-2 text-yellow-400">
                 <AlertTriangle className="w-3.5 h-3.5" />
-                <span>EVM Address will change</span>
+                <span>Signing key will change</span>
               </div>
             </div>
             <div className="flex gap-3">
@@ -185,13 +204,9 @@ export function AccountCard() {
               <Check className="w-5 h-5 text-emerald-400" />
               <h3 className="text-base font-semibold text-white">Key Rotated</h3>
             </div>
-            <p className="text-[13px] text-zinc-400 mb-3">
-              Your signing key has been rotated successfully. Your new EVM address:
+            <p className="text-[13px] text-zinc-400 mb-5">
+              Your signing key has been rotated successfully.
             </p>
-            <div className="field-row px-3.5 py-3 mb-5">
-              <p className="text-[11px] text-text-muted uppercase tracking-[0.06em] font-medium mb-0.5">New EVM Address</p>
-              <p className="text-[13px] text-emerald-400 font-mono break-all">{rotationSuccess}</p>
-            </div>
             <button
               onClick={() => { setRotationSuccess(null); window.location.reload() }}
               className="w-full px-4 py-2 text-[13px] text-white bg-white/10 hover:bg-white/20 rounded-lg border border-white/5 transition-colors cursor-pointer"

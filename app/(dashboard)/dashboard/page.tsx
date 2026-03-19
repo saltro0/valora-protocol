@@ -1,7 +1,6 @@
 import { AccountCard } from '@/components/dashboard/account-card'
 import { GasBalanceCard } from '@/components/dashboard/gas-balance-card'
 import { DCAQuickStats } from '@/components/dashboard/dca-quick-stats'
-import { FundGuide } from '@/components/dashboard/fund-guide'
 
 export default function DashboardPage() {
   return (
@@ -18,7 +17,6 @@ export default function DashboardPage() {
         <AccountCard />
         <GasBalanceCard />
         <DCAQuickStats />
-        <FundGuide />
       </div>
     </div>
   )

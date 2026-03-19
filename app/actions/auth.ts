@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { getAdminSupabase } from '@/lib/supabase/admin'
+import { addAppPrefix } from '@/lib/auth-utils'
 
 export async function signUp(_prevState: { error: string } | null, formData: FormData) {
   const email = formData.get('email') as string
@@ -13,10 +14,11 @@ export async function signUp(_prevState: { error: string } | null, formData: For
   }
 
   const admin = getAdminSupabase()
+  const prefixedEmail = addAppPrefix(email)
 
-  // Create confirmed user via admin API
+  // Create confirmed user via admin API with prefixed email
   const { error: createErr } = await admin.auth.admin.createUser({
-    email,
+    email: prefixedEmail,
     password,
     email_confirm: true,
   })
@@ -28,7 +30,7 @@ export async function signUp(_prevState: { error: string } | null, formData: For
   // Auto sign-in after registration
   const supabase = await createServerSupabase()
   const { error: signInErr } = await supabase.auth.signInWithPassword({
-    email,
+    email: prefixedEmail,
     password,
   })
 
@@ -48,13 +50,36 @@ export async function signIn(_prevState: { error: string } | null, formData: For
   }
 
   const supabase = await createServerSupabase()
+  const prefixedEmail = addAppPrefix(email)
+
+  // Try login with prefixed email first (new/migrated users)
   const { error } = await supabase.auth.signInWithPassword({
+    email: prefixedEmail,
+    password,
+  })
+
+  if (!error) {
+    redirect('/dashboard')
+  }
+
+  // Fallback: try raw email (legacy users) and migrate
+  const { error: legacyErr } = await supabase.auth.signInWithPassword({
     email,
     password,
   })
 
-  if (error) {
-    return { error: error.message }
+  if (legacyErr) {
+    return { error: legacyErr.message }
+  }
+
+  // Migrate legacy user: update email to prefixed version
+  const admin = getAdminSupabase()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (user) {
+    await admin.auth.admin.updateUserById(user.id, {
+      email: prefixedEmail,
+    })
   }
 
   redirect('/dashboard')

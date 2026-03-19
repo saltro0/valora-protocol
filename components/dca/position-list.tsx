@@ -6,7 +6,7 @@ import { Plus, TrendingUp } from "lucide-react";
 import Link from "next/link";
 
 export function PositionList() {
-  const { positions, loading, error, actionLoading, stop, withdraw } = useDCA();
+  const { positions, loading, error } = useDCA();
 
   if (loading) {
     return (
@@ -53,12 +53,7 @@ export function PositionList() {
     <div className="space-y-4">
       {positions.map((pos) => (
         <Link key={pos.positionId} href={`/dca/${pos.positionId}`}>
-          <PositionCard
-            position={pos}
-            onStop={stop}
-            onWithdraw={withdraw}
-            actionLoading={actionLoading}
-          />
+          <PositionCard position={pos} />
         </Link>
       ))}
     </div>

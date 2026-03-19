@@ -3,6 +3,11 @@
 import { useAccount } from '@/hooks/use-account'
 import { ArrowDownToLine, ExternalLink } from 'lucide-react'
 
+const NETWORK = process.env.NEXT_PUBLIC_HEDERA_NETWORK || 'testnet'
+const HASHSCAN_BASE = NETWORK === 'mainnet'
+  ? 'https://hashscan.io/mainnet'
+  : 'https://hashscan.io/testnet'
+
 export function FundGuide() {
   const { account } = useAccount()
   if (!account) return null
@@ -28,7 +33,7 @@ export function FundGuide() {
       </div>
 
       <a
-        href={`https://hashscan.io/mainnet/account/${account.accountId}`}
+        href={`${HASHSCAN_BASE}/account/${account.accountId}`}
         target="_blank"
         rel="noopener noreferrer"
         className="inline-flex items-center gap-1.5 text-[13px] text-text-muted hover:text-accent-cyan transition-colors"

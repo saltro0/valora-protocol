@@ -474,6 +474,12 @@ export async function fetchUserPositions(): Promise<{
                 .eq("user_id", user.id);
             }
           }
+
+          // Estimate remaining balance from DB when on-chain read fails
+          if (tokenInBalance === "0" && executionsLeft > 0 && row.amount_per_swap) {
+            const rawBalance = row.amount_per_swap * executionsLeft;
+            tokenInBalance = formatRawAmount(rawBalance, tokenInDecimals);
+          }
         }
 
         return {
@@ -602,6 +608,12 @@ export async function fetchPositionDetail(
             .eq("position_id", positionId)
             .eq("user_id", user.id);
         }
+      }
+
+      // Estimate remaining balance from DB when on-chain read fails
+      if (tokenInBalance === "0" && executionsLeft > 0 && row.amount_per_swap) {
+        const rawBalance = row.amount_per_swap * executionsLeft;
+        tokenInBalance = formatRawAmount(rawBalance, tokenInDecimals);
       }
     }
 

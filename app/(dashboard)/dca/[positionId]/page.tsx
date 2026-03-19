@@ -8,6 +8,7 @@ import { PositionDetail } from "@/components/dca/position-detail";
 import {
   fetchPositionDetail,
   fetchExecutionHistory,
+  stopDCAPosition,
   withdrawDCAPosition,
 } from "@/app/actions/dca";
 import type { DCAPositionSummary, DCAExecutionRecord } from "@/types";
@@ -21,6 +22,7 @@ export default function PositionDetailPage() {
   const [executions, setExecutions] = useState<DCAExecutionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollStartRef = useRef<number>(0);
   const execCountRef = useRef<number>(0);
@@ -66,15 +68,22 @@ export default function PositionDetailPage() {
     return () => stopPolling();
   }, [stopPolling]);
 
+  // Initial fetch + 60s polling for on-chain data
   useEffect(() => {
     const id = parseInt(positionId);
-    Promise.all([
-      fetchPositionDetail(id),
-      fetchExecutionHistory(id),
-    ]).then(([posRes, execRes]) => {
-      if (posRes.position) setPosition(posRes.position);
-      if (execRes.executions) setExecutions(execRes.executions);
-    }).finally(() => setLoading(false));
+    const fetchData = () =>
+      Promise.all([
+        fetchPositionDetail(id),
+        fetchExecutionHistory(id),
+      ]).then(([posRes, execRes]) => {
+        if (posRes.position) setPosition(posRes.position);
+        if (execRes.executions) setExecutions(execRes.executions);
+      });
+
+    fetchData().finally(() => setLoading(false));
+
+    const interval = setInterval(fetchData, 60_000);
+    return () => clearInterval(interval);
   }, [positionId]);
 
   if (loading) {
@@ -105,16 +114,31 @@ export default function PositionDetailPage() {
         }}
         onStop={async () => {
           setActionLoading(true);
-          await withdrawDCAPosition(parseInt(positionId));
-          setPosition((p) => p ? { ...p, status: "withdrawn" } : null);
+          setActionError(null);
+          const result = await withdrawDCAPosition(parseInt(positionId));
+          if (result.success) {
+            const { position: updated } = await fetchPositionDetail(parseInt(positionId));
+            if (updated) setPosition(updated);
+            else setPosition((p) => p ? { ...p, status: "withdrawn" } : null);
+          } else {
+            setActionError(result.error || "Failed to stop position");
+          }
           setActionLoading(false);
         }}
         onWithdraw={async () => {
           setActionLoading(true);
-          await withdrawDCAPosition(parseInt(positionId));
-          setPosition((p) => p ? { ...p, status: "withdrawn" } : null);
+          setActionError(null);
+          const result = await withdrawDCAPosition(parseInt(positionId));
+          if (result.success) {
+            const { position: updated } = await fetchPositionDetail(parseInt(positionId));
+            if (updated) setPosition(updated);
+            else setPosition((p) => p ? { ...p, status: "withdrawn" } : null);
+          } else {
+            setActionError(result.error || "Failed to withdraw position");
+          }
           setActionLoading(false);
         }}
+        actionError={actionError}
         actionLoading={actionLoading}
       />
     </div>

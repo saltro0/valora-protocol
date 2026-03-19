@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Pause, Wallet } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import Image from "next/image";
 import { ExecutionCountdown } from "./execution-countdown";
 import { TOKEN_MAP } from "@/lib/constants/tokens";
@@ -28,12 +28,9 @@ const INTERVAL_LABELS: Record<number, string> = {
 
 interface PositionCardProps {
   position: DCAPositionSummary;
-  onStop?: (id: number) => void;
-  onWithdraw?: (id: number) => void;
-  actionLoading?: string | null;
 }
 
-export function PositionCard({ position, onStop, onWithdraw, actionLoading }: PositionCardProps) {
+export function PositionCard({ position }: PositionCardProps) {
   const status = STATUS_STYLES[position.status] || STATUS_STYLES.active;
   const intervalLabel = INTERVAL_LABELS[position.interval] || `Every ${position.interval}s`;
   const progress =
@@ -112,27 +109,6 @@ export function PositionCard({ position, onStop, onWithdraw, actionLoading }: Po
         />
       )}
 
-      {/* Actions */}
-      {position.status === "active" && (
-        <div className="flex gap-3 mt-1">
-          <button
-            onClick={() => onStop?.(position.positionId)}
-            disabled={actionLoading === `stop-${position.positionId}`}
-            className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold bg-white/5 border border-white/10 text-zinc-300 hover:text-white hover:bg-amber-500/10 hover:border-amber-500/20 hover:shadow-[0_0_15px_rgba(245,158,11,0.15)] transition-all disabled:opacity-50 disabled:cursor-not-allowed group/btn"
-          >
-            <Pause className="w-3.5 h-3.5 text-amber-500 group-hover/btn:scale-110 transition-transform" />
-            Stop
-          </button>
-          <button
-            onClick={() => onWithdraw?.(position.positionId)}
-            disabled={actionLoading === `withdraw-${position.positionId}`}
-            className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold bg-white/5 border border-white/10 text-zinc-300 hover:text-white hover:bg-[#00f0ff]/10 hover:border-[#00f0ff]/20 hover:shadow-[0_0_15px_rgba(0,240,255,0.15)] transition-all disabled:opacity-50 disabled:cursor-not-allowed group/btn"
-          >
-            <Wallet className="w-3.5 h-3.5 text-[#00f0ff] group-hover/btn:scale-110 transition-transform" />
-            Withdraw
-          </button>
-        </div>
-      )}
     </div>
   );
 }

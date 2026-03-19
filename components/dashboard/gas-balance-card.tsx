@@ -40,6 +40,9 @@ export function GasBalanceCard() {
   const whbarHbar = Number(whbarBalance) / 1e8
   const hasWhbar = whbarBalance > 0n
 
+  // Hide the card entirely while loading or if there's nothing to redeem
+  if (loading || (!hasBalance && !hasWhbar)) return null
+
   const handleWithdraw = async () => {
     setWithdrawing(true)
     setMessage(null)

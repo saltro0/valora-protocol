@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { createBrowserSupabase } from '@/lib/supabase/client'
 import { useSessionStore } from '@/store/session-store'
+import { stripAppPrefix } from '@/lib/auth-utils'
 
 export function useSession() {
   const { user, setUser, setLoading } = useSessionStore()
@@ -12,7 +13,7 @@ export function useSession() {
 
     // Fetch current session
     supabase.auth.getUser().then(({ data: { user: u } }) => {
-      setUser(u ? { id: u.id, email: u.email || '' } : null)
+      setUser(u ? { id: u.id, email: stripAppPrefix(u.email || '') } : null)
       setLoading(false)
     })
 
@@ -21,7 +22,7 @@ export function useSession() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
-        setUser({ id: session.user.id, email: session.user.email || '' })
+        setUser({ id: session.user.id, email: stripAppPrefix(session.user.email || '') })
       } else {
         setUser(null)
       }

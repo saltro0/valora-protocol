@@ -1,11 +1,20 @@
 "use client";
 
-import { ArrowRight, Square, Wallet, Loader2 } from "lucide-react";
+import { ArrowRight, Square, Wallet, Loader2, Clock } from "lucide-react";
 import Image from "next/image";
 import { ExecutionCountdown } from "./execution-countdown";
 import { ExecutionHistory } from "./execution-history";
 import { TOKEN_MAP } from "@/lib/constants/tokens";
 import type { DCAPositionSummary, DCAExecutionRecord } from "@/types";
+
+const INTERVAL_LABELS: Record<number, string> = {
+  60: "Every 1 min",
+  3600: "Every 1 hour",
+  14400: "Every 4 hours",
+  43200: "Every 12 hours",
+  86400: "Every 1 day",
+  604800: "Every 1 week",
+};
 
 function tokenLogo(address: string): string | undefined {
   return TOKEN_MAP[address.toLowerCase()]?.logo;
@@ -18,6 +27,7 @@ interface PositionDetailProps {
   onWithdraw: () => void;
   onRefresh?: () => void;
   actionLoading: boolean;
+  actionError?: string | null;
 }
 
 export function PositionDetail({
@@ -27,9 +37,11 @@ export function PositionDetail({
   onWithdraw,
   onRefresh,
   actionLoading,
+  actionError,
 }: PositionDetailProps) {
   const totalExec = position.executionsDone + position.executionsLeft;
   const progress = totalExec > 0 ? (position.executionsDone / totalExec) * 100 : 0;
+  const intervalLabel = INTERVAL_LABELS[position.interval] || `Every ${position.interval}s`;
 
   return (
     <div className="space-y-6">
@@ -71,6 +83,14 @@ export function PositionDetail({
             <span className="text-xs text-text-muted">Per swap</span>
             <p className="text-text-primary font-medium">{position.amountPerSwap} {position.tokenInSymbol}</p>
           </div>
+          <div>
+            <span className="text-xs text-text-muted flex items-center gap-1"><Clock className="w-3 h-3" /> Interval</span>
+            <p className="text-text-primary font-medium">{intervalLabel}</p>
+          </div>
+          <div>
+            <span className="text-xs text-text-muted">Created</span>
+            <p className="text-text-primary font-medium">{new Date(position.createdAt).toLocaleDateString()}</p>
+          </div>
         </div>
 
         <div className="w-full h-1.5 rounded-full bg-surface-base">
@@ -78,12 +98,22 @@ export function PositionDetail({
         </div>
       </div>
 
-      {position.status === "active" && position.lastExecutedAt > 0 && (
+      {position.status === "active" && (
         <ExecutionCountdown
-          lastExecutedAt={position.lastExecutedAt}
+          lastExecutedAt={
+            position.lastExecutedAt > 0
+              ? position.lastExecutedAt
+              : Math.floor(new Date(position.createdAt).getTime() / 1000)
+          }
           interval={position.interval}
           onExpired={onRefresh}
         />
+      )}
+
+      {actionError && (
+        <div className="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+          {actionError}
+        </div>
       )}
 
       {position.status === "active" && (
